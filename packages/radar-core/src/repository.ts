@@ -1,0 +1,33 @@
+import {
+  clearRadarData,
+  createProposalDraft,
+  getLatestDraftForOpportunity,
+  getOpportunity,
+  getPreferences,
+  listDraftsForOpportunity,
+  listOpportunities,
+  listSources,
+  markSourcesPolled,
+  replaceOpportunities,
+  replaceSources,
+  savePreferences,
+  updateOpportunityStatus,
+  upsertOpportunities,
+} from './store';
+
+export const radarRepository = {
+  listOpportunities,
+  getOpportunity,
+  updateOpportunityStatus,
+  listSources,
+  replaceSources,
+  markSourcesPolled,
+  replaceOpportunities,
+  upsertOpportunities,
+  getPreferences,
+  savePreferences,
+  listDraftsForOpportunity,
+  getLatestDraftForOpportunity,
+  createProposalDraft,
+  clearRadarData,
+};

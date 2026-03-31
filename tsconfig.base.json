@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@opsmesh/db": ["packages/db/src"],
+      "@opsmesh/radar-core": ["packages/radar-core/src"],
+      "@opsmesh/openclaw-adapter": ["packages/openclaw-adapter/src"],
+      "@opsmesh/source-connectors": ["packages/source-connectors/src"]
+    }
+  }
+}

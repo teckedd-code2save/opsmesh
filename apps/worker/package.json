@@ -1,0 +1,20 @@
+{
+  "name": "@opsmesh/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@opsmesh/openclaw-adapter": "workspace:*",
+    "@opsmesh/radar-core": "workspace:*",
+    "@opsmesh/source-connectors": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

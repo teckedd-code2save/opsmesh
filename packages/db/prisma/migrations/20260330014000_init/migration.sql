@@ -1,0 +1,2 @@
+-- Initial Gig Radar schema placeholder.
+-- Generate and refine via Prisma migrate once dependencies are installed.

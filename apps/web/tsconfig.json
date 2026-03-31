@@ -1,0 +1,33 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "allowJs": true,
+    "noEmit": true,
+    "incremental": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@opsmesh/db": ["../../packages/db/src"],
+      "@opsmesh/radar-core": ["../../packages/radar-core/src"],
+      "@opsmesh/radar-core/*": ["../../packages/radar-core/src/*"],
+      "@opsmesh/openclaw-adapter": ["../../packages/openclaw-adapter/src"],
+      "@opsmesh/source-connectors": ["../../packages/source-connectors/src"]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

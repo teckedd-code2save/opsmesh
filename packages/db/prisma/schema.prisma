@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SourceKind {
+  rss
+  html
+  api
+  board
+}
+
+enum FetchStatus {
+  queued
+  running
+  succeeded
+  failed
+}
+
+enum OpportunityStatus {
+  new
+  shortlisted
+  saved
+  rejected
+  drafted
+  applied
+  archived
+}
+
+enum PayType {
+  hourly
+  fixed
+  unknown
+}
+
+enum Recommendation {
+  strong_match
+  maybe
+  weak
+  avoid
+}
+
+model RadarSource {
+  id              String      @id @default(cuid())
+  name            String
+  kind            SourceKind
+  baseUrl         String
+  feedUrl         String?
+  parserKey       String
+  active          Boolean     @default(true)
+  pollIntervalMin Int         @default(30)
+  lastPolledAt    DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  fetchRuns       RadarFetchRun[]
+  opportunities   Opportunity[]
+}
+
+model RadarFetchRun {
+  id            String      @id @default(cuid())
+  sourceId      String
+  source        RadarSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  status        FetchStatus @default(queued)
+  fetchedCount  Int         @default(0)
+  newCount      Int         @default(0)
+  errorMessage  String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime    @default(now())
+
+  @@index([sourceId, createdAt])
+}
+
+model Opportunity {
+  id             String             @id @default(cuid())
+  sourceId       String
+  source         RadarSource        @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  externalId     String?
+  canonicalUrl   String
+  dedupeHash     String             @unique
+
+  title          String
+  company        String?
+  location       String?
+  remote         Boolean            @default(false)
+
+  summary        String?
+  rawText        String
+
+  payType        PayType            @default(unknown)
+  payMin         Decimal?           @db.Decimal(10, 2)
+  payMax         Decimal?           @db.Decimal(10, 2)
+  currency       String?
+
+  postedAt       DateTime?
+  fetchedAt      DateTime           @default(now())
+
+  status         OpportunityStatus  @default(new)
+
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  tags           OpportunityTag[]
+  scores         OpportunityScore[]
+  drafts         ProposalDraft[]
+  actions        OpportunityAction[]
+
+  @@index([sourceId, fetchedAt])
+  @@index([status, fetchedAt])
+  @@index([remote, fetchedAt])
+}
+
+model OpportunityTag {
+  id             String       @id @default(cuid())
+  opportunityId  String
+  opportunity    Opportunity  @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  tag            String
+
+  @@index([opportunityId])
+  @@index([tag])
+}
+
+model OpportunityScore {
+  id               String          @id @default(cuid())
+  opportunityId    String
+  opportunity      Opportunity     @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  fitScore         Int
+  payScore         Int
+  qualityScore     Int
+  effortScore      Int
+  confidenceScore  Int
+
+  recommendation   Recommendation
+  reasoningSummary String
+  strengths        Json?
+  risks            Json?
+
+  createdAt        DateTime        @default(now())
+
+  @@index([opportunityId, createdAt])
+}
+
+model ProposalDraft {
+  id              String        @id @default(cuid())
+  opportunityId   String
+  opportunity     Opportunity   @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  version         Int           @default(1)
+  subjectLine     String?
+  body            String
+  talkingPoints   Json?
+
+  createdAt       DateTime      @default(now())
+
+  @@index([opportunityId, createdAt])
+}
+
+model OpportunityAction {
+  id              String        @id @default(cuid())
+  opportunityId   String
+  opportunity     Opportunity   @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  actionType      String
+  notes           String?
+  payload         Json?
+
+  createdAt       DateTime      @default(now())
+
+  @@index([opportunityId, createdAt])
+}
+
+model RadarPreference {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+
+  minHourlyRate     Decimal? @db.Decimal(10, 2)
+  minFixedBudget    Decimal? @db.Decimal(10, 2)
+  remoteOnly        Boolean  @default(true)
+
+  preferredKeywords Json?
+  excludedKeywords  Json?
+  allowedCategories Json?
+
+  notes             String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
