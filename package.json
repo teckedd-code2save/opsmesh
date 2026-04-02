@@ -6,6 +6,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "worker:run-once": "pnpm --filter @opsmesh/worker run-once"
   }
 }

@@ -13,6 +13,16 @@ export type RadarSourceRecord = {
   active: boolean;
   pollIntervalMin: number;
   lastPolledAt?: string;
+  lastPollStatus?: 'idle' | 'running' | 'success' | 'error';
+  lastPollMessage?: string;
+  lastPollStartedAt?: string;
+  lastPollDurationMs?: number;
+  qualityScore?: number;
+  totalPolls?: number;
+  totalOpportunitiesSeen?: number;
+  totalRelevantSeen?: number;
+  consecutiveLowSignalRuns?: number;
+  autoDisabledAt?: string;
 };
 
 export type OpportunityScoreRecord = {
@@ -43,9 +53,12 @@ export type OpportunityRecord = {
   payMax?: string;
   currency?: string;
   status: OpportunityStatus;
+  lane?: 'dev' | 'nondev';
   tags: string[];
   fetchedAt: string;
   score?: OpportunityScoreRecord;
+  telegramDeliveredAt?: string;
+  telegramDeliveryError?: string;
 };
 
 export type RadarPreferenceRecord = {
@@ -58,6 +71,13 @@ export type RadarPreferenceRecord = {
   excludedKeywords: string[];
   allowedCategories: string[];
   notes?: string;
+  minFitScore?: number;
+  telegramEnabled?: boolean;
+  telegramHighScoreOnly?: boolean;
+  telegramMinScore?: number;
+  autoPollingEnabled?: boolean;
+  autoPollingIntervalMin?: number;
+  webhookUrl?: string;
 };
 
 export type ProposalDraftRecord = {

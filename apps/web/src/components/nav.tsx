@@ -1,4 +1,8 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { tokens } from './ui';
 
 const links = [
   { href: '/dashboard/radar', label: 'Radar' },
@@ -7,24 +11,39 @@ const links = [
 ];
 
 export function DashboardNav() {
+  const pathname = usePathname();
+
   return (
-    <nav style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-      {links.map((link) => (
-        <Link
-          key={link.href}
-          href={link.href}
-          style={{
-            padding: '10px 16px',
-            borderRadius: 9999,
-            border: '1px solid rgba(255,255,255,0.12)',
-            color: '#e2e8f0',
-            textDecoration: 'none',
-            fontSize: 14,
-          }}
-        >
-          {link.label}
-        </Link>
-      ))}
+    <nav
+      style={{
+        display: 'flex',
+        gap: 4,
+        marginBottom: 32,
+        borderBottom: `1px solid ${tokens.border}`,
+        paddingBottom: 16,
+      }}
+    >
+      {links.map((link) => {
+        const active = pathname === link.href || (link.href !== '/dashboard' && pathname.startsWith(link.href));
+        return (
+          <Link
+            key={link.href}
+            href={link.href}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 8,
+              color: active ? tokens.accent : tokens.subtle,
+              textDecoration: 'none',
+              fontSize: 14,
+              fontWeight: active ? 600 : 400,
+              background: active ? tokens.accentDim : 'transparent',
+              transition: 'color 120ms, background 120ms',
+            }}
+          >
+            {link.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }

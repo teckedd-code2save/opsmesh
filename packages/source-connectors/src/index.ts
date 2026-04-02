@@ -39,3 +39,4 @@ export class StubRssConnector implements SourceConnector {
 }
 
 export * from './rss';
+export * from './html';

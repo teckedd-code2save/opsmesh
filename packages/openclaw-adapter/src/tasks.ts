@@ -1,3 +1,4 @@
+import { makeTelegramCallbackToken } from '@opsmesh/radar-core';
 import type { AnalyzeOpportunityInput, AnalyzeOpportunityOutput, DraftProposalInput, DraftProposalOutput } from './index';
 import type { HighSignalAlert } from './notify';
 
@@ -14,16 +15,27 @@ ${JSON.stringify(input, null, 2)}`;
 
 export function buildHighSignalAlertText(input: HighSignalAlert) {
   return [
-    'New strong opportunity',
-    `Title: ${input.title}`,
-    `Source: ${input.sourceName}`,
-    input.payLabel ? `Pay: ${input.payLabel}` : null,
-    `Fit: ${input.fitScore}/100`,
-    `Why: ${input.reasoningSummary}`,
-    `Link: ${input.canonicalUrl}`,
+    '📌 OpsMesh lead',
+    input.title,
+    `Fit ${input.fitScore}/100 · ${input.sourceName}`,
+    input.summary?.trim() ? input.summary.trim() : input.reasoningSummary,
   ]
     .filter(Boolean)
     .join('\n');
+}
+
+export function buildTelegramCallbackData(action: 'save' | 'reject' | 'draft' | 'more', opportunityId: string) {
+  return `ops:${action}:${makeTelegramCallbackToken(opportunityId)}`;
+}
+
+export function parseTelegramCallbackData(input: string) {
+  const match = /^ops:(save|reject|draft|more):([a-z0-9_\-]+)$/i.exec(input.trim());
+  if (!match) return null;
+
+  return {
+    action: match[1].toLowerCase() as 'save' | 'reject' | 'draft' | 'more',
+    callbackToken: match[2],
+  };
 }
 
 export function buildDraftProposalTask(input: DraftProposalInput) {

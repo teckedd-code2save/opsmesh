@@ -46,6 +46,16 @@ export async function draftProposal(input: DraftProposalInput): Promise<DraftPro
   return runOpenClawProposalDraft(input);
 }
 
+export async function sendTelegramMessage(
+  message: string,
+  options?: {
+    buttons?: { text: string; callback_data: string; style?: 'danger' | 'success' | 'primary' }[][];
+  },
+) {
+  const { deliverTelegramMessage } = await import('./notify');
+  return deliverTelegramMessage(message, options);
+}
+
 export * from './runtime';
 export * from './notify';
 export * from './tasks';

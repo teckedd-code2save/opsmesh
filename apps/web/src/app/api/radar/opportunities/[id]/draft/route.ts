@@ -9,15 +9,10 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: 'Opportunity not found' }, { status: 404 });
   }
 
-  if ((item.score?.fitScore ?? 0) < 60 || item.score?.recommendation === 'avoid' || item.score?.recommendation === 'weak') {
-    return NextResponse.json(
-      {
-        error: 'This opportunity is too weak to draft against. Save it only if you want to review it manually.',
-        code: 'low_fit_blocked',
-      },
-      { status: 422 },
-    );
-  }
+  const lowFitWarning =
+    (item.score?.fitScore ?? 0) < 60 || item.score?.recommendation === 'avoid' || item.score?.recommendation === 'weak'
+      ? 'Low-fit opportunity. Draft generated anyway.'
+      : null;
 
   const existingDraft = getLatestDraftForOpportunity(params.id);
   if (existingDraft) {
@@ -29,6 +24,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       item: getOpportunity(params.id),
       draft: existingDraft,
       reused: true,
+      warning: lowFitWarning,
     });
   }
 
@@ -58,5 +54,6 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     item: getOpportunity(params.id),
     draft,
     reused: false,
+    warning: lowFitWarning,
   });
 }

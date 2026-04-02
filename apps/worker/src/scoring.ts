@@ -20,6 +20,7 @@ export async function scoreFetchedItem(item: RawSourceItem, sourceName: string) 
   const alert =
     analysis.recommendation === 'strong_match'
       ? await notifyHighSignalOpportunity({
+          opportunityId: normalized.externalId ?? normalized.canonicalUrl.replace(/[^a-z0-9]+/gi, '_').toLowerCase(),
           title: normalized.title,
           sourceName,
           canonicalUrl: normalized.canonicalUrl,

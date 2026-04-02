@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { OpportunityRecord, ProposalDraftRecord, RadarPreferenceRecord, RadarSourceRecord } from './types';
 
@@ -8,10 +9,38 @@ type RadarState = {
   sources: RadarSourceRecord[];
   preferences: RadarPreferenceRecord;
   drafts: ProposalDraftRecord[];
+  runtime?: {
+    lastWorkerRunAt?: string;
+    lastWorkerResult?: {
+      sourceCount: number;
+      resultCount: number;
+      notifiedCount: number;
+      errorCount: number;
+      trigger?: 'manual' | 'scheduled';
+    };
+    recentRuns?: Array<{
+      ranAt: string;
+      sourceCount: number;
+      resultCount: number;
+      notifiedCount: number;
+      errorCount: number;
+      trigger: 'manual' | 'scheduled';
+    }>;
+    workerLock?: {
+      lockedAt: string;
+      owner: string;
+    } | null;
+  };
 };
 
-const DATA_DIR = path.resolve(process.cwd(), '.opsmesh');
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(MODULE_DIR, '../../../');
+const LEGACY_DATA_DIR = path.join(process.cwd(), '.opsmesh');
+const DATA_DIR = process.env.OPSMESH_DATA_DIR
+  ? path.resolve(process.env.OPSMESH_DATA_DIR)
+  : path.join(REPO_ROOT, '.opsmesh');
 const DATA_FILE = path.join(DATA_DIR, 'radar-state.json');
+const LEGACY_DATA_FILE = path.join(LEGACY_DATA_DIR, 'radar-state.json');
 
 function makeDefaultState(): RadarState {
   return {
@@ -57,6 +86,36 @@ function makeDefaultState(): RadarState {
         active: true,
         pollIntervalMin: 45,
       },
+      {
+        id: 'src_live_5',
+        name: 'Remotive RSS',
+        kind: 'rss',
+        baseUrl: 'https://remotive.com',
+        feedUrl: 'https://remotive.com/remote-jobs/feed',
+        parserKey: 'rss:remotive',
+        active: true,
+        pollIntervalMin: 30,
+      },
+      {
+        id: 'src_live_6',
+        name: 'JustRemote RSS',
+        kind: 'rss',
+        baseUrl: 'https://justremote.co',
+        feedUrl: 'https://justremote.co/remote-jobs.rss',
+        parserKey: 'rss:justremote',
+        active: true,
+        pollIntervalMin: 45,
+      },
+      {
+        id: 'src_live_7',
+        name: 'Remote.co RSS',
+        kind: 'rss',
+        baseUrl: 'https://remote.co',
+        feedUrl: 'https://remote.co/remote-jobs/developer/feed/',
+        parserKey: 'rss:remoteco',
+        active: true,
+        pollIntervalMin: 45,
+      },
     ],
     preferences: {
       userId: 'demo-user',
@@ -70,6 +129,12 @@ function makeDefaultState(): RadarState {
       notes: 'Bias toward small, winnable technical tasks that can be shipped quickly.',
     },
     drafts: [],
+    runtime: {
+      lastWorkerRunAt: undefined,
+      lastWorkerResult: undefined,
+      recentRuns: [],
+      workerLock: null,
+    },
   };
 }
 
@@ -79,18 +144,36 @@ function ensureDataDir() {
   }
 }
 
+function ensureCanonicalDataFile() {
+  ensureDataDir();
+
+  if (!existsSync(DATA_FILE) && existsSync(LEGACY_DATA_FILE)) {
+    copyFileSync(LEGACY_DATA_FILE, DATA_FILE);
+  }
+}
+
 function normalizeState(value: Partial<RadarState> | undefined): RadarState {
   const defaults = makeDefaultState();
+  const existingSources = value?.sources ?? [];
+  const sourceIds = new Set(existingSources.map((source) => source.id));
+  const mergedSources = [...existingSources, ...defaults.sources.filter((source) => !sourceIds.has(source.id))];
+
   return {
     opportunities: value?.opportunities ?? defaults.opportunities,
-    sources: value?.sources ?? defaults.sources,
+    sources: mergedSources,
     preferences: value?.preferences ?? defaults.preferences,
     drafts: value?.drafts ?? defaults.drafts,
+    runtime: {
+      lastWorkerRunAt: value?.runtime?.lastWorkerRunAt ?? defaults.runtime?.lastWorkerRunAt,
+      lastWorkerResult: value?.runtime?.lastWorkerResult ?? defaults.runtime?.lastWorkerResult,
+      recentRuns: value?.runtime?.recentRuns ?? defaults.runtime?.recentRuns ?? [],
+      workerLock: value?.runtime?.workerLock ?? defaults.runtime?.workerLock ?? null,
+    },
   };
 }
 
 export function loadRadarState(): RadarState {
-  ensureDataDir();
+  ensureCanonicalDataFile();
   if (!existsSync(DATA_FILE)) {
     const initial = makeDefaultState();
     saveRadarState(initial);
@@ -108,7 +191,7 @@ export function loadRadarState(): RadarState {
 }
 
 export function saveRadarState(state: RadarState) {
-  ensureDataDir();
+  ensureCanonicalDataFile();
   writeFileSync(DATA_FILE, JSON.stringify(state, null, 2));
 }
 
