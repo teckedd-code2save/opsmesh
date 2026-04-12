@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { analyzeOpportunity, notifyHighSignalOpportunity } from '@opsmesh/openclaw-adapter';
+import { analyzeOpportunity, notifyHighSignalOpportunity, sendRunSummary } from '@opsmesh/openclaw-adapter';
 import { radarRepository, makeCompactOpportunityId, type OpportunityRecord } from '@opsmesh/radar-core';
 import { HtmlConnector, RssConnector, type RawSourceItem } from '@opsmesh/source-connectors';
 
@@ -124,6 +124,7 @@ async function toOpportunity(item: RawSourceItem, sourceId: string, sourceName: 
 
 export async function POST(req: Request) {
   const owner = `api-poll-${Date.now()}`;
+  const startedAt = Date.now();
   const lock = radarRepository.acquireWorkerLock(owner);
 
   if (!lock) {
@@ -220,10 +221,18 @@ export async function POST(req: Request) {
     radarRepository.replaceSources(nextSources);
     radarRepository.replaceOpportunities(opportunities.sort((a, b) => b.fetchedAt.localeCompare(a.fetchedAt)));
 
+    const prefs = radarRepository.getPreferences();
     let notifiedCount = 0;
-    for (const item of opportunities.filter((entry) => entry.score?.recommendation === 'strong_match')) {
-      if (item.telegramDeliveredAt) continue;
+    const shouldNotify = (item: OpportunityRecord) => {
+      if (!prefs.telegramEnabled) return false;
+      if (item.telegramDeliveredAt) return false;
+      const fit = item.score?.fitScore ?? 0;
+      const minScore = prefs.telegramMinScore ?? 70;
+      if (prefs.telegramHighScoreOnly === false) return fit >= minScore;
+      return item.score?.recommendation === 'strong_match' && fit >= minScore;
+    };
 
+    for (const item of opportunities.filter(shouldNotify)) {
       const delivery = await notifyHighSignalOpportunity({
         opportunityId: item.id,
         title: item.title,
@@ -262,6 +271,14 @@ export async function POST(req: Request) {
     };
 
     radarRepository.recordWorkerRun(summary);
+    await sendRunSummary({
+      trigger: trigger === 'scheduled' ? 'scheduled' : 'manual',
+      resultCount: opportunities.length,
+      notifiedCount,
+      errorCount: errors.length,
+      durationMs: Date.now() - startedAt,
+      ok: errors.length === 0,
+    });
 
     return NextResponse.json({
       ok: true,

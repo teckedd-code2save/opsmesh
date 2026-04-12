@@ -35,6 +35,21 @@ function nextRunLabel(intervalMin: number) {
   return next.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function fmtDate(ms?: number | string) {
+  if (!ms) return 'Never';
+  const value = typeof ms === 'number' ? new Date(ms) : new Date(ms);
+  if (Number.isNaN(value.getTime())) return 'Unknown';
+  return value.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function schedulerHealth(runtime: any, intervalMin: number) {
+  const lastRunAtMs = runtime?.scheduler?.lastRunAtMs;
+  if (!lastRunAtMs) return { label: 'No scheduled runs yet', tone: 'warn' as const };
+  const graceMs = intervalMin * 60_000 * 2.2;
+  const stale = Date.now() - Number(lastRunAtMs) > graceMs;
+  return stale ? { label: 'Missed-run risk', tone: 'bad' as const } : { label: 'Healthy', tone: 'good' as const };
+}
+
 function SectionHeader({ icon, title, description }: { icon: string; title: string; description?: string }) {
   return (
     <div style={{ marginBottom: 18 }}>
@@ -75,6 +90,7 @@ export default function PreferencesPage() {
   const [webhookBusy, setWebhookBusy] = useState(false);
   const [polling, setPolling] = useState(false);
   const [runtime, setRuntime] = useState<any>(null);
+  const [schedulerBusy, setSchedulerBusy] = useState(false);
   const [qualityRows, setQualityRows] = useState<Array<Partial<RadarSourceRecord> & { name: string; active: boolean }>>([]);
 
   // Local form state
@@ -110,6 +126,19 @@ export default function PreferencesPage() {
       .catch(() => setPrefs(null));
 
     fetch('/api/radar/runtime').then((res) => res.json()).then(setRuntime).catch(() => setRuntime(null));
+    fetch('/api/radar/scheduler/status').then((res) => res.json()).then((payload) => {
+      if (payload?.job) setRuntime((prev: any) => ({ ...(prev ?? {}), scheduler: {
+        installed: true,
+        jobId: payload.job.id,
+        jobName: payload.job.name,
+        cronExpr: payload.job.schedule?.expr,
+        nextRunAtMs: payload.job.state?.nextRunAtMs,
+        lastRunAtMs: payload.job.state?.lastRunAtMs,
+        lastRunStatus: payload.job.state?.lastRunStatus,
+        lastDeliveryStatus: payload.job.state?.lastDeliveryStatus,
+        consecutiveErrors: payload.job.state?.consecutiveErrors ?? 0,
+      }}));
+    }).catch(() => {});
     fetch('/api/radar/sources/quality').then((res) => res.json()).then((payload) => setQualityRows(payload.results ?? [])).catch(() => setQualityRows([]));
   }, []);
 
@@ -142,7 +171,13 @@ export default function PreferencesPage() {
       if (!res.ok) throw new Error('Save failed');
       const updated = await res.json() as RadarPreferenceRecord;
       setPrefs(updated);
-      setNotice({ text: 'Preferences saved.', tone: 'success' });
+
+      const syncRes = await fetch('/api/radar/scheduler/sync', { method: 'POST' });
+      const syncPayload = await syncRes.json();
+      if (!syncRes.ok) throw new Error(syncPayload.error ?? 'Scheduler sync failed');
+      setRuntime((prev: any) => ({ ...(prev ?? {}), scheduler: syncPayload.scheduler ?? prev?.scheduler }));
+
+      setNotice({ text: 'Preferences saved and OpenClaw cron synced.', tone: 'success' });
     } catch {
       setNotice({ text: 'Could not save preferences.', tone: 'error' });
     } finally {
@@ -192,18 +227,48 @@ export default function PreferencesPage() {
   async function runNow() {
     setPolling(true);
     try {
-      const res = await fetch('/api/radar/poll', { method: 'POST' });
-      const data = await res.json() as { resultCount?: number; errorCount?: number };
-      setNotice({ text: `Polled — ${data.resultCount ?? 0} results, ${data.errorCount ?? 0} errors`, tone: 'success' });
+      const res = await fetch('/api/radar/scheduler/test', { method: 'POST' });
+      if (!res.ok) throw new Error('Run failed');
+      const data = await res.json();
+      setNotice({ text: `Safer scheduled path tested — ${data.resultCount ?? 0} leads, ${data.errorCount ?? 0} errors`, tone: 'success' });
     } catch {
-      setNotice({ text: 'Poll failed.', tone: 'error' });
+      setNotice({ text: 'Could not test safer scheduled path.', tone: 'error' });
     } finally {
       setPolling(false);
     }
   }
 
+  async function disableScheduler() {
+    setSchedulerBusy(true);
+    try {
+      const res = await fetch('/api/radar/scheduler/disable', { method: 'POST' });
+      if (!res.ok) throw new Error('Disable failed');
+      setRuntime((prev: any) => ({ ...(prev ?? {}), scheduler: { ...(prev?.scheduler ?? {}), installed: false } }));
+      setNotice({ text: 'Scheduler disabled.', tone: 'success' });
+    } catch {
+      setNotice({ text: 'Could not disable scheduler.', tone: 'error' });
+    } finally {
+      setSchedulerBusy(false);
+    }
+  }
+
+  async function deleteScheduler() {
+    setSchedulerBusy(true);
+    try {
+      const res = await fetch('/api/radar/scheduler/delete', { method: 'POST' });
+      if (!res.ok) throw new Error('Delete failed');
+      setRuntime((prev: any) => ({ ...(prev ?? {}), scheduler: null }));
+      setNotice({ text: 'Scheduler deleted.', tone: 'success' });
+    } catch {
+      setNotice({ text: 'Could not delete scheduler.', tone: 'error' });
+    } finally {
+      setSchedulerBusy(false);
+    }
+  }
+
   const cron = cronFromInterval(autoPollingIntervalMin);
   const topSources = useMemo(() => [...qualityRows].sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0)).slice(0, 6), [qualityRows]);
+  const health = schedulerHealth(runtime, autoPollingIntervalMin);
 
   return (
     <PageShell
@@ -295,18 +360,22 @@ export default function PreferencesPage() {
         <Panel>
           <SectionHeader icon="⏱" title="Automation / Polling Schedule" description="Configure how often Gig Radar checks your sources." />
           <div style={{ display: 'grid', gap: 14 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
               <div style={{ background: tokens.bg, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: '10px 12px' }}>
                 <div style={{ fontSize: 11, color: tokens.muted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Last run</div>
                 <div style={{ marginTop: 4, color: tokens.text, fontSize: 14, fontWeight: 700 }}>{timeAgo(runtime?.lastWorkerRunAt)}</div>
               </div>
               <div style={{ background: tokens.bg, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: '10px 12px' }}>
                 <div style={{ fontSize: 11, color: tokens.muted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Next run</div>
-                <div style={{ marginTop: 4, color: tokens.text, fontSize: 14, fontWeight: 700 }}>{autoPollingEnabled ? nextRunLabel(autoPollingIntervalMin) : 'Disabled'}</div>
+                <div style={{ marginTop: 4, color: tokens.text, fontSize: 14, fontWeight: 700 }}>{runtime?.scheduler?.nextRunAtMs ? fmtDate(runtime.scheduler.nextRunAtMs) : autoPollingEnabled ? nextRunLabel(autoPollingIntervalMin) : 'Disabled'}</div>
               </div>
               <div style={{ background: tokens.bg, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: '10px 12px' }}>
-                <div style={{ fontSize: 11, color: tokens.muted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Last result</div>
-                <div style={{ marginTop: 4, color: tokens.text, fontSize: 14, fontWeight: 700 }}>{runtime?.lastWorkerResult ? `${runtime.lastWorkerResult.resultCount ?? 0} leads · ${runtime.lastWorkerResult.errorCount ?? 0} errors` : 'No runs yet'}</div>
+                <div style={{ fontSize: 11, color: tokens.muted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Last delivery</div>
+                <div style={{ marginTop: 4, color: tokens.text, fontSize: 14, fontWeight: 700 }}>{runtime?.scheduler?.lastDeliveryStatus ?? 'Unknown'}</div>
+              </div>
+              <div style={{ background: tokens.bg, border: `1px solid ${tokens.border}`, borderRadius: tokens.radiusSm, padding: '10px 12px' }}>
+                <div style={{ fontSize: 11, color: tokens.muted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Scheduler health</div>
+                <div style={{ marginTop: 4, color: health.tone === 'good' ? tokens.good : health.tone === 'bad' ? tokens.bad : tokens.warn, fontSize: 14, fontWeight: 700 }}>{health.label}</div>
               </div>
             </div>
             <ToggleRow
@@ -334,15 +403,21 @@ export default function PreferencesPage() {
             {autoPollingEnabled && (
               <div style={{ background: tokens.bg, borderRadius: tokens.radiusSm, padding: '10px 14px', border: `1px solid ${tokens.border}` }}>
                 <div style={{ fontSize: 11, color: tokens.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Cron expression</div>
-                <code style={{ fontSize: 13, color: tokens.accent, fontFamily: 'monospace' }}>{cron}</code>
+                <code style={{ fontSize: 13, color: tokens.accent, fontFamily: 'monospace' }}>{runtime?.scheduler?.cronExpr ?? cron}</code>
                 <div style={{ fontSize: 12, color: tokens.muted, marginTop: 4 }}>
-                  Add this to your crontab or scheduler to run the worker automatically.
+                  OpsMesh now syncs this schedule to an OpenClaw cron job when you save. Job: {runtime?.scheduler?.jobName ?? 'opsmesh_radar_poll'} {runtime?.scheduler?.jobId ? `(${runtime.scheduler.jobId})` : ''} · last run {fmtDate(runtime?.scheduler?.lastRunAtMs)} · status {runtime?.scheduler?.lastRunStatus ?? 'unknown'}.
                 </div>
               </div>
             )}
-            <div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <ActionButton onClick={runNow} disabled={polling} variant="secondary">
-                {polling ? 'Polling…' : 'Run Now'}
+                {polling ? 'Testing…' : 'Test Safer Path'}
+              </ActionButton>
+              <ActionButton onClick={disableScheduler} disabled={schedulerBusy} variant="ghost">
+                {schedulerBusy ? 'Disabling…' : 'Disable Scheduler'}
+              </ActionButton>
+              <ActionButton onClick={deleteScheduler} disabled={schedulerBusy} variant="ghost">
+                {schedulerBusy ? 'Deleting…' : 'Delete Scheduler'}
               </ActionButton>
             </div>
 

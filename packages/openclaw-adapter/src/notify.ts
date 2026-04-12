@@ -132,3 +132,25 @@ export async function notifyHighSignalOpportunity(input: HighSignalAlert) {
     ],
   });
 }
+
+export async function sendRunSummary(input: {
+  trigger: 'manual' | 'scheduled' | 'run_now' | 'debug';
+  resultCount: number;
+  notifiedCount: number;
+  errorCount: number;
+  durationMs: number;
+  ok?: boolean;
+}) {
+  const label = input.trigger === 'scheduled'
+    ? 'OpsMesh cron'
+    : input.trigger === 'run_now'
+      ? 'Run now'
+      : input.trigger === 'debug'
+        ? 'Debug run'
+        : 'Manual poll';
+
+  const durationSec = Math.max(1, Math.round(input.durationMs / 1000));
+  const status = input.ok === false ? 'failed' : 'completed';
+  const message = `${label} — ${input.resultCount} leads · ${input.notifiedCount} notifications · ${input.errorCount} errors · ${durationSec}s · ${status}`;
+  return deliverTelegramMessage(message);
+}

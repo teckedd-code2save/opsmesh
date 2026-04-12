@@ -26,6 +26,21 @@ type RadarState = {
       errorCount: number;
       trigger: 'manual' | 'scheduled';
     }>;
+    scheduler?: {
+      installed?: boolean;
+      mode?: 'external-cron' | 'openclaw-cron';
+      command?: string;
+      checkedAt?: string;
+      status?: 'unknown' | 'configured';
+      jobId?: string;
+      jobName?: string;
+      cronExpr?: string;
+      nextRunAtMs?: number;
+      lastRunAtMs?: number;
+      lastRunStatus?: string;
+      lastDeliveryStatus?: string;
+      consecutiveErrors?: number;
+    };
     workerLock?: {
       lockedAt: string;
       owner: string;
@@ -133,6 +148,21 @@ function makeDefaultState(): RadarState {
       lastWorkerRunAt: undefined,
       lastWorkerResult: undefined,
       recentRuns: [],
+      scheduler: {
+        installed: false,
+        mode: 'openclaw-cron',
+        command: 'cd /Users/welcome/.openclaw/workspace/opsmesh && pnpm --filter @opsmesh/worker run-once',
+        checkedAt: undefined,
+        status: 'unknown',
+        jobId: undefined,
+        jobName: 'opsmesh_radar_poll',
+        cronExpr: undefined,
+        nextRunAtMs: undefined,
+        lastRunAtMs: undefined,
+        lastRunStatus: undefined,
+        lastDeliveryStatus: undefined,
+        consecutiveErrors: 0,
+      },
       workerLock: null,
     },
   };
@@ -167,6 +197,7 @@ function normalizeState(value: Partial<RadarState> | undefined): RadarState {
       lastWorkerRunAt: value?.runtime?.lastWorkerRunAt ?? defaults.runtime?.lastWorkerRunAt,
       lastWorkerResult: value?.runtime?.lastWorkerResult ?? defaults.runtime?.lastWorkerResult,
       recentRuns: value?.runtime?.recentRuns ?? defaults.runtime?.recentRuns ?? [],
+      scheduler: value?.runtime?.scheduler ?? defaults.runtime?.scheduler,
       workerLock: value?.runtime?.workerLock ?? defaults.runtime?.workerLock ?? null,
     },
   };

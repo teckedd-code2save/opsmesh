@@ -130,8 +130,14 @@ export function getRadarRuntime() {
 
 export function acquireWorkerLock(owner: string) {
   const now = new Date().toISOString();
+  const nowMs = Date.now();
+  const LOCK_TTL_MS = 5 * 60 * 1000;
   const next = updateRadarState((state) => {
-    if (state.runtime?.workerLock) return;
+    const existing = state.runtime?.workerLock;
+    if (existing) {
+      const lockedAtMs = new Date(existing.lockedAt).getTime();
+      if (Number.isFinite(lockedAtMs) && nowMs - lockedAtMs < LOCK_TTL_MS) return;
+    }
     state.runtime = state.runtime ?? {};
     state.runtime.workerLock = { lockedAt: now, owner };
   });
