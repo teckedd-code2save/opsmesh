@@ -1,0 +1,9 @@
+# Provenance record. Files here are Convoy-authored and may be
+# iterated on autonomously during rehearsal and medic.
+# If a developer edits any of these, provenance flips permanently.
+version: 1
+files:
+  - path: vercel.json
+    authored_by: convoy
+  - path: .env.schema
+    authored_by: convoy
